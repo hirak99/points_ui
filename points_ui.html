@@ -1,0 +1,285 @@
+<head>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+<SCRIPT SRC="http://cdn.mathjax.org/mathjax/latest/MathJax.js">
+  MathJax.Hub.Config({
+    extensions: ["tex2jax.js"],
+    jax: ["input/TeX","output/HTML-CSS"],
+    tex2jax: {inlineMath: [["$","$"],["\\(","\\)"]]}
+  });
+</SCRIPT>
+<script>
+
+
+	function CSPL(){};
+	
+	CSPL._gaussJ = {};
+	CSPL._gaussJ.solve = function(A, x)	// in Matrix, out solutions
+	{
+		var m = A.length;
+		for(var k=0; k<m; k++)	// column
+		{
+			// pivot for column
+			var i_max = 0; var vali = Number.NEGATIVE_INFINITY;
+			for(var i=k; i<m; i++) if(A[i][k]>vali) { i_max = i; vali = A[i][k];}
+			CSPL._gaussJ.swapRows(A, k, i_max);
+			
+			if(A[i_max][i] == 0) console.log("matrix is singular!");
+			
+			// for all rows below pivot
+			for(var i=k+1; i<m; i++)
+			{
+				for(var j=k+1; j<m+1; j++)
+					A[i][j] = A[i][j] - A[k][j] * (A[i][k] / A[k][k]);
+				A[i][k] = 0;
+			}
+		}
+		
+		for(var i=m-1; i>=0; i--)	// rows = columns
+		{
+			var v = A[i][m] / A[i][i];
+			x[i] = v;
+			for(var j=i-1; j>=0; j--)	// rows
+			{
+				A[j][m] -= A[j][i] * v;
+				A[j][i] = 0;
+			}
+		}
+	}
+	CSPL._gaussJ.zerosMat = function(r,c) {var A = []; for(var i=0; i<r; i++) {A.push([]); for(var j=0; j<c; j++) A[i].push(0);} return A;}
+	CSPL._gaussJ.printMat = function(A){ for(var i=0; i<A.length; i++) console.log(A[i]); }
+	CSPL._gaussJ.swapRows = function(m, k, l) {var p = m[k]; m[k] = m[l]; m[l] = p;}
+		
+		
+	CSPL.getNaturalKs = function(xs, ys, ks)	// in x values, in y values, out k values
+	{
+		var n = xs.length-1;
+		var A = CSPL._gaussJ.zerosMat(n+1, n+2);
+			
+		for(var i=1; i<n; i++)	// rows
+		{
+			A[i][i-1] = 1/(xs[i] - xs[i-1]);
+			
+			A[i][i  ] = 2 * (1/(xs[i] - xs[i-1]) + 1/(xs[i+1] - xs[i])) ;
+			
+			A[i][i+1] = 1/(xs[i+1] - xs[i]);
+			
+			A[i][n+1] = 3*( (ys[i]-ys[i-1])/((xs[i] - xs[i-1])*(xs[i] - xs[i-1]))  +  (ys[i+1]-ys[i])/ ((xs[i+1] - xs[i])*(xs[i+1] - xs[i])) );
+		}
+		
+		A[0][0  ] = 2/(xs[1] - xs[0]);
+		A[0][1  ] = 1/(xs[1] - xs[0]);
+		A[0][n+1] = 3 * (ys[1] - ys[0]) / ((xs[1]-xs[0])*(xs[1]-xs[0]));
+		
+		A[n][n-1] = 1/(xs[n] - xs[n-1]);
+		A[n][n  ] = 2/(xs[n] - xs[n-1]);
+		A[n][n+1] = 3 * (ys[n] - ys[n-1]) / ((xs[n]-xs[n-1])*(xs[n]-xs[n-1]));
+			
+		CSPL._gaussJ.solve(A, ks);		
+	}
+		
+	CSPL.evalSpline = function(x, xs, ys, ks)
+	{
+		var i = 1;
+		while(xs[i]<x) i++;
+		
+		var t = (x - xs[i-1]) / (xs[i] - xs[i-1]);
+		
+		var a =  ks[i-1]*(xs[i]-xs[i-1]) - (ys[i]-ys[i-1]);
+		var b = -ks[i  ]*(xs[i]-xs[i-1]) + (ys[i]-ys[i-1]);
+		
+		var q = (1-t)*ys[i-1] + t*ys[i] + t*(1-t)*(a*(1-t)+b*t);
+		return q;
+	}
+
+	
+
+function run() {
+    var UIPoints = function() {
+        this.scale = 300;
+
+        this.height=400;
+        this.width=800;
+
+        this.points=[[-1,0],[0,1],[.5,.3],[1,1]];
+        
+        var th=this;
+        
+        // Point change handlers
+        this.ptChanged=[]
+        this.ptChangedCall = function() {
+            for (var i=0; i<th.ptChanged.length; ++i) th.ptChanged[i]();
+        }
+        
+        this.ptChangedCall();
+        
+        // Mouse handling routines
+        this.mousePti = null;
+        function MouseEventPos(e) {
+            return [e.pageX-th.canvas.offsetLeft,e.pageY-th.canvas.offsetTop];
+        }
+        function MouseClosest(e) {
+            var closest;
+            var cdist;
+            var pos=MouseEventPos(e);
+            for (var i=0; i<th.points.length; ++i) {
+                pti=th.from(th.points[i]);
+                dist=Math.pow(pti[0]-pos[0],2)+Math.pow(pti[1]-pos[1],2);
+                if (i==0 || dist<cdist) {
+                    cdist=dist;
+                    closest=i;
+                }
+            }
+            if (cdist<=15*15) return closest;
+            else return null;
+        }
+        this.MouseDown = function(e) {
+            var ptIndex = MouseClosest(e);
+            if (ptIndex!=null) {
+                th.mousePti = ptIndex;
+                th.MouseMove(e);
+            }
+        }
+        
+        this.MouseUp = function(e) {
+            th.mousePti=null;
+        }
+        
+        this.MouseMove = function(e) {
+            if (th.mousePti!=null) {
+                var pt=th.to([e.pageX-th.canvas.offsetLeft,e.pageY-th.canvas.offsetTop]);
+                th.points[th.mousePti]=pt;
+                th.ptChangedCall();
+                th.draw();
+            }
+        }
+        
+        this.DoubleClick = function(e) {
+            var ptIndex = MouseClosest(e);
+            if (ptIndex!=null) {
+                th.points.splice(ptIndex,1);
+            }
+            else {
+                th.points.push(th.to(MouseEventPos(e)));
+                console.log(MouseEventPos(e));
+                //th.mousePti=th.points.length-1;
+            }
+            th.mousePti=null;
+            th.ptChangedCall();
+            th.draw();
+        }
+        
+        this.bind=function(canvas) {
+            this.canvas=canvas;
+            canvas.addEventListener("mousedown", th.MouseDown, false);
+            canvas.addEventListener("mousemove", th.MouseMove, false);
+            canvas.addEventListener("mouseup", th.MouseUp, false);
+            canvas.addEventListener("dblclick", th.DoubleClick, false);
+            this.draw();
+        }
+
+        this.toX = function(i) {return (i-this.width/2)/(this.scale/1);}
+        this.toY = function(j) {return (this.height/2 - j)/this.scale + 0.5;}
+        this.fromX = function(x) {return (this.scale/1)*x+this.width/2;}
+        this.fromY = function(y) {return this.height/2 - (y - 0.5)*this.scale;}
+        this.to = function(pti) {return [this.toX(pti[0]),this.toY(pti[1])];}
+        this.from = function(pt) {return [this.fromX(pt[0]),this.fromY(pt[1])];}
+        
+        this.draw = function() {
+            var ctx = canvas.getContext('2d');
+            
+            ctx.clearRect(0,0,this.width,this.height);
+            ctx.fillStyle = "rgba(255, 255, 0, 0.25)";
+            ctx.fillRect(0,this.height/2-this.scale/2,this.width,this.scale);
+            
+            ctx.beginPath();
+            ctx.moveTo(0,this.height/2+this.scale/2); ctx.lineTo(this.width,this.height/2+this.scale/2);
+            ctx.moveTo(0,this.height/2-this.scale/2); ctx.lineTo(this.width,this.height/2-this.scale/2);
+            ctx.stroke();
+
+            for (var i=0; i<this.points.length; ++i) {
+                ctx.strokeStyle = "rgba(0, 0, 0, 255)";
+                
+                ctx.fillStyle = "rgba(0,0,0,0.1)";
+                ctx.beginPath();
+                var pti=this.from(this.points[i]);
+                ctx.arc(pti[0],pti[1],15,0,2*Math.PI,false);
+                ctx.fill();
+                
+                ctx.fillStyle = "rgba(0,0,255,255)";
+                ctx.beginPath();
+                var pti=this.from(this.points[i]);
+                ctx.arc(pti[0],pti[1],5,0,2*Math.PI,false);
+                ctx.fill();
+                //ctx.stroke();
+            }
+            
+            for (var i=0; i<this.drawAfter.length; ++i) this.drawAfter[i](ctx);
+        }
+        
+        // Drawing hooks, each function must take ctx as the argument
+        this.drawAfter=[];
+    
+    }
+
+    var pointsUI=new UIPoints();
+    var th=this;
+    this.recalcCubic=function() {
+        ptCopy=pointsUI.points.slice(0);
+        ptCopy.sort(function(a,b){return a[0]<b[0]?-1:1;});
+        th.xs=[for (p of ptCopy) p[0]];
+        th.ys=[for (p of ptCopy) p[1]];
+        th.ks=[];
+        CSPL.getNaturalKs(th.xs,th.ys,th.ks);
+        th.minX=Math.min.apply(null,th.xs);
+        th.maxX=Math.max.apply(null,th.xs);
+    }
+    pointsUI.ptChanged.push(th.recalcCubic);
+    th.recalcCubic();
+    this.drawCubic = function(ctx) {
+        ctx.strokeStyle = "rgba(0, 0, 0, 1)";
+        ctx.beginPath();
+        first=true;
+        for (var i=pointsUI.fromX(th.minX); i<=pointsUI.fromX(th.maxX); ++i) {
+        //for (var i=pointsUI.fromX(pointsUI.points[0][0]); i<=pointsUI.fromX(pointsUI.points[pointsUI.points.length-1][0]); ++i) {
+            var x=pointsUI.toX(i);
+            var y=CSPL.evalSpline(x, th.xs, th.ys, th.ks);
+            if (first) {
+                ctx.moveTo(i, pointsUI.fromY(y));
+                first=false;
+            } else ctx.lineTo(i, pointsUI.fromY(y));
+        }
+        ctx.stroke();
+    }
+    pointsUI.drawAfter.push(this.drawCubic);
+    var canvas = document.getElementById('tutorial');
+    pointsUI.bind(canvas);
+
+}
+
+$(function() {
+    run();
+});
+</script>
+</head>
+
+<html>
+Putting togethere an UI for Javascript to edit points, useful for demos.
+
+This demo is to illustrate Cubic Spline interpolation. Credit where it's due: <a href="http://blog.ivank.net/interpolation-with-cubic-splines.html">this uses the excellent javascript cubic spline library by IvanK</a>
+
+<h3>Math</h3>
+Given $(x_1,y_1),...,(x_n,y_n)$, we will approximate intermediate values using $n-1$ polynomial (of degree 3) functions $f_t(x)$, $t\in \{1,...,n\}$.<br/>
+<br/>
+$f_t(x)$ will be used for $x\in [x_t,x_{t+1}]$.
+
+<br/>
+For each function, ensure -
+$$\begin{array}{l} f_t(x_t)=y_t\\f_t(x_{t+1})=y_{t+1}\\
+f_{t-1}'(x_t)=f_t'(x_t)\\
+f_{t-1}''(x_t)=f_t''(x_t)\end{array}$$
+
+At end points, ensure $f_1''(x_1)=f_{n-1}''(x_n)=0$. This is gives a linear equation on the coefficients of each $f_t$, which can be solved to find the cubic-spline functions.
+
+<br/><br/>
+
+<canvas id="tutorial" width="800" height="400"></canvas></html>

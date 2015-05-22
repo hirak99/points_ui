@@ -226,8 +226,8 @@ function run() {
     this.recalcCubic=function() {
         ptCopy=pointsUI.points.slice(0);
         ptCopy.sort(function(a,b){return a[0]<b[0]?-1:1;});
-        th.xs=[for (p of ptCopy) p[0]];
-        th.ys=[for (p of ptCopy) p[1]];
+        th.xs=ptCopy.map(function(x) {return x[0];});
+        th.ys=ptCopy.map(function(x) {return x[1];});
         th.ks=[];
         CSPL.getNaturalKs(th.xs,th.ys,th.ks);
         th.minX=Math.min.apply(null,th.xs);
